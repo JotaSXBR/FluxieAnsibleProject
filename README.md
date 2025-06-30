@@ -104,21 +104,28 @@ O Ansible se conectará como `deploy` e usará `sudo` (`become: yes`) para execu
 
 Após a execução bem-sucedida do playbook, os seguintes serviços estarão disponíveis:
 
-*   **Traefik Dashboard:** `https://traefik.example.com`
+*   **Traefik Dashboard:** `https://traefik.example.com` (protegido por senha)
 *   **Portainer:** `https://portainer.example.com`
+*   **Prometheus:** `https://prometheus.example.com` (protegido por senha)
+*   **Grafana:** `https://grafana.example.com` (protegido por senha, login padrão: `admin`/`admin`)
+*   **Jaeger:** `https://jaeger.example.com` (protegido por senha)
 
 **Passos importantes:**
 
-1.  **Configure seu DNS:** Antes de acessar, você **precisa** configurar os registros DNS dos seus domínios (neste exemplo, `traefik.example.com` e `portainer.example.com`) para apontar para o endereço IP do seu servidor.
+1.  **Configure seu DNS:** Antes de acessar, você **precisa** configurar os registros DNS dos seus domínios para apontar para o endereço IP do seu servidor.
 2.  **Aguarde o SSL:** O Traefik irá gerar automaticamente os certificados SSL com Let's Encrypt no primeiro acesso. Isso pode levar um minuto.
-3.  **Primeiro Login no Portainer:** Ao acessar o Portainer pela primeira vez, você será solicitado a criar um usuário administrador.
+3.  **Primeiro Login nos Serviços:**
+    *   **Portainer:** Ao acessar pela primeira vez, você será solicitado a criar um usuário administrador.
+    *   **Grafana:** O login inicial é `admin` com a senha `admin`. Você será solicitado a trocá-la no primeiro acesso.
 
 ## Acesso SFTP aos Volumes
 
 Conforme solicitado, os diretórios de configuração dos serviços estão localizados em `/opt` e pertencem ao usuário `deploy`. Você pode acessá-los via SFTP para gerenciar as configurações:
 
 *   **Configuração do Traefik:** `/opt/traefik/config/`
+*   **Configuração do Prometheus:** `/opt/prometheus/config/`
 *   **Dados do Portainer:** `/opt/portainer/data/`
+*   **Dados do Grafana:** `/opt/grafana/data/`
 *   **Arquivo Docker Compose:** `/opt/docker-compose.yml`
 
-Lembre-se que a "fonte da verdade" é o seu projeto Ansible. Se você editar o `docker-compose.yml` manualmente no servidor, o Ansible irá sobrescrevê-lo na próxima vez que o playbook for executado. 
+Lembre-se que a "fonte da verdade" é o seu projeto Ansible. Se você editar o `docker-compose.yml` ou `prometheus.yml` manualmente no servidor, o Ansible irá sobrescrevê-los na próxima vez que o playbook for executado. 

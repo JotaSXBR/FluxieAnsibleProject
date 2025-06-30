@@ -28,12 +28,17 @@ services:
       - "--certificatesresolvers.letsencrypt.acme.storage=/acme/acme.json"
       - "--certificatesresolvers.letsencrypt.acme.httpchallenge=true"
       - "--certificatesresolvers.letsencrypt.acme.httpchallenge.entrypoint=web"
+      - "--metrics.prometheus=true"
+      - "--tracing.opentelemetry=true"
+      - "--tracing.opentelemetry.address=jaeger:4318"
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.dashboard.rule=Host(`{{ traefik_domain }}`)"
       - "traefik.http.routers.dashboard.service=api@internal"
       - "traefik.http.routers.dashboard.entrypoints=websecure"
       - "traefik.http.routers.dashboard.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.dashboard.middlewares=traefik-auth"
+      - "traefik.http.middlewares.traefik-auth.basicauth.users=admin:$apr1$$dTDIgkrC$$q3Jpio4JSWLtpKZZSaFGN0"
 
   portainer:
     image: "portainer/portainer-ce:{{ portainer_version }}"
@@ -53,6 +58,65 @@ services:
       - "traefik.http.routers.portainer.entrypoints=websecure"
       - "traefik.http.routers.portainer.tls.certresolver=letsencrypt"
       - "traefik.http.services.portainer-service.loadbalancer.server.port=9000"
+
+  prometheus:
+    image: "prom/prometheus:{{ prometheus_version }}"
+    container_name: "prometheus"
+    restart: unless-stopped
+    networks:
+      - traefik-public
+    volumes:
+      - "/opt/prometheus/config:/etc/prometheus"
+      - "prometheus-data:/prometheus"
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.prometheus.rule=Host(`{{ prometheus_domain }}`)"
+      - "traefik.http.routers.prometheus.service=prometheus-service"
+      - "traefik.http.routers.prometheus.entrypoints=websecure"
+      - "traefik.http.routers.prometheus.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.prometheus.middlewares=auth"
+      - "traefik.http.services.prometheus-service.loadbalancer.server.port=9090"
+
+  grafana:
+    image: "grafana/grafana-oss:{{ grafana_version }}"
+    container_name: "grafana"
+    restart: unless-stopped
+    volumes:
+      - "/opt/grafana/data:/var/lib/grafana"
+      - "/opt/grafana/provisioning:/etc/grafana/provisioning"
+    networks:
+      - traefik-public
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.grafana.rule=Host(`grafana.{{ domain }}`)"
+      - "traefik.http.routers.grafana.service=grafana-service"
+      - "traefik.http.routers.grafana.entrypoints=websecure"
+      - "traefik.http.routers.grafana.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.grafana.middlewares=traefik-auth"
+      - "traefik.http.services.grafana-service.loadbalancer.server.port=3000"
+
+  jaeger:
+    image: "jaegertracing/all-in-one:{{ jaeger_version }}"
+    container_name: "jaeger"
+    restart: unless-stopped
+    networks:
+      - traefik-public
+    environment:
+      - COLLECTOR_OTLP_ENABLED=true
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.jaeger.rule=Host(`{{ jaeger_domain }}`)"
+      - "traefik.http.routers.jaeger.service=jaeger-service"
+      - "traefik.http.routers.jaeger.entrypoints=websecure"
+      - "traefik.http.routers.jaeger.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.jaeger.middlewares=traefik-auth"
+      - "traefik.http.services.jaeger-service.loadbalancer.server.port=16686"
+
+volumes:
+  prometheus-data:
+  grafana-data:
 
 networks:
   traefik-public:
