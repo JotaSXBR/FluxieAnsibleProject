@@ -1,0 +1,7 @@
+# requirements.yml
+# Este arquivo lista as coleções Ansible necessárias para este projeto.
+# Para instalar todas, execute: ansible-galaxy collection install -r requirements.yml
+
+collections:
+  - name: community.general # Usado para os módulos ufw, swap_file, etc.
+  - name: community.docker  # Usado para os módulos docker_compose_v2, docker_network, etc. 

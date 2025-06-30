@@ -21,10 +21,25 @@ python3 -m pip install ansible
 ```
 
 ### 3. Instalar Coleções do Ansible Galaxy
-Nosso playbook utiliza módulos da coleção `community.general`. Instale-a com o seguinte comando:
+Nosso playbook utiliza módulos de coleções da comunidade. A maneira mais fácil de instalar todas as dependências é usando o arquivo `requirements.yml` fornecido:
 ```bash
-ansible-galaxy collection install community.general
+ansible-galaxy collection install -r requirements.yml
 ```
+Isso garantirá que você tenha as coleções `community.general` e `community.docker` necessárias.
+
+### Como Atualizar o Ambiente
+
+Para manter seu ambiente atualizado, você pode executar os seguintes comandos:
+
+*   **Para atualizar o Ansible (o motor):**
+    ```bash
+    python3 -m pip install --upgrade ansible
+    ```
+*   **Para atualizar as Coleções (módulos):**
+    ```bash
+    ansible-galaxy collection install -r requirements.yml --upgrade
+    ```
+
 Após esses passos, seu ambiente local estará pronto para executar o playbook.
 
 ## Requisitos do Servidor Remoto
