@@ -83,4 +83,27 @@ Após concluir a configuração do ambiente local e os pré-requisitos do servid
 
     **Nota:** Após a primeira execução bem-sucedida, o playbook configura o `sudo` sem senha para o usuário `deploy`. Em execuções futuras, a opção `--ask-become-pass` não será mais estritamente necessária. Se você configurou o acesso com chaves SSH (conforme recomendado), a opção `--ask-pass` também pode ser omitida.
 
-O Ansible se conectará como `deploy` e usará `sudo` (`become: yes`) para executar as tarefas que exigem privilégios de administrador. 
+O Ansible se conectará como `deploy` e usará `sudo` (`become: yes`) para executar as tarefas que exigem privilégios de administrador.
+
+## Pós-Instalação: Acessando os Serviços
+
+Após a execução bem-sucedida do playbook, os seguintes serviços estarão disponíveis:
+
+*   **Traefik Dashboard:** `https://traefik.example.com`
+*   **Portainer:** `https://portainer.example.com`
+
+**Passos importantes:**
+
+1.  **Configure seu DNS:** Antes de acessar, você **precisa** configurar os registros DNS dos seus domínios (neste exemplo, `traefik.example.com` e `portainer.example.com`) para apontar para o endereço IP do seu servidor.
+2.  **Aguarde o SSL:** O Traefik irá gerar automaticamente os certificados SSL com Let's Encrypt no primeiro acesso. Isso pode levar um minuto.
+3.  **Primeiro Login no Portainer:** Ao acessar o Portainer pela primeira vez, você será solicitado a criar um usuário administrador.
+
+## Acesso SFTP aos Volumes
+
+Conforme solicitado, os diretórios de configuração dos serviços estão localizados em `/opt` e pertencem ao usuário `deploy`. Você pode acessá-los via SFTP para gerenciar as configurações:
+
+*   **Configuração do Traefik:** `/opt/traefik/config/`
+*   **Dados do Portainer:** `/opt/portainer/data/`
+*   **Arquivo Docker Compose:** `/opt/docker-compose.yml`
+
+Lembre-se que a "fonte da verdade" é o seu projeto Ansible. Se você editar o `docker-compose.yml` manualmente no servidor, o Ansible irá sobrescrevê-lo na próxima vez que o playbook for executado. 

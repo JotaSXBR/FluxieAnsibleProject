@@ -20,6 +20,13 @@
     # Define o tamanho do swap como 50% da RAM, com um mínimo de 1GB e um máximo de 4GB.
     swap_size_mb: "{{ ([1024, (ansible_memtotal_mb / 2) | int, 4096] | sort)[1] }}"
 
+    # Variáveis para Traefik e Portainer
+    traefik_version: "v3.4.3"
+    portainer_version: "lts" # Versão mais recente do Portainer CE
+    traefik_domain: "traefik.fluxie.com.br" # TROCAR PELO SEU DOMÍNIO
+    portainer_domain: "portainer.fluxie.com.br" # TROCAR PELO SEU DOMÍNIO
+    letsencrypt_email: "ceo@fluxie.com.br" # TROCAR PELO SEU EMAIL
+
   tasks:
     # --------------------------------------------------------------------------
     # ETAPA 1: ATUALIZAÇÃO DO SISTEMA E PACOTES ESSENCIAIS
@@ -305,6 +312,121 @@
         enabled: yes
       tags: [auditd, security]
 
+    # --------------------------------------------------------------------------
+    # ETAPA 10: INSTALAÇÃO E CONFIGURAÇÃO DO DOCKER
+    # --------------------------------------------------------------------------
+    - name: "Instalar pré-requisitos para o repositório Docker via HTTPS"
+      ansible.builtin.apt:
+        name:
+          - apt-transport-https
+          - ca-certificates
+          - curl
+          - gnupg
+        state: present
+        update_cache: yes
+      tags: [docker]
+
+    - name: "Adicionar a chave GPG oficial do Docker"
+      ansible.builtin.apt_key:
+        url: https://download.docker.com/linux/ubuntu/gpg
+        state: present
+      tags: [docker]
+
+    - name: "Adicionar o repositório oficial do Docker"
+      ansible.builtin.apt_repository:
+        repo: "deb [arch=amd64] https://download.docker.com/linux/ubuntu {{ ansible_distribution_release }} stable"
+        state: present
+      tags: [docker]
+
+    - name: "Instalar Docker Engine e plugins relacionados"
+      ansible.builtin.apt:
+        name:
+          - docker-ce
+          - docker-ce-cli
+          - containerd.io
+          - docker-buildx-plugin
+          - docker-compose-plugin
+        state: present
+        update_cache: yes
+      tags: [docker]
+
+    - name: "Adicionar o usuário '{{ deploy_user }}' ao grupo docker"
+      ansible.builtin.user:
+        name: "{{ deploy_user }}"
+        groups: docker
+        append: yes
+      tags: [docker]
+
+    - name: "Configurar o daemon do Docker com rotação de logs"
+      ansible.builtin.copy:
+        dest: /etc/docker/daemon.json
+        content: |
+          {
+            "log-driver": "json-file",
+            "log-opts": {
+              "max-size": "10m",
+              "max-file": "3"
+            }
+          }
+        owner: root
+        group: root
+        mode: '0644'
+      notify: Reiniciar Docker
+      tags: [docker]
+
+    - name: "Garantir que o serviço Docker esteja ativo e habilitado"
+      ansible.builtin.service:
+        name: docker
+        state: started
+        enabled: yes
+      tags: [docker]
+
+    # --------------------------------------------------------------------------
+    # ETAPA 11: IMPLANTAÇÃO DA STACK DE APLICAÇÕES (TRAEFIK + PORTAINER)
+    # --------------------------------------------------------------------------
+    - name: "Criar rede para o Traefik"
+      community.docker.docker_network:
+        name: traefik-public
+      tags: [apps]
+
+    - name: "Criar diretórios de configuração para Traefik e Portainer"
+      ansible.builtin.file:
+        path: "{{ item.path }}"
+        state: directory
+        owner: "{{ deploy_user }}"
+        group: "{{ deploy_user }}"
+        mode: "0755"
+      loop:
+        - { path: "/opt/traefik/config" }
+        - { path: "/opt/traefik/acme" }
+        - { path: "/opt/portainer/data" }
+      tags: [apps]
+
+    - name: "Criar arquivo acme.json para o Let's Encrypt com permissões restritas"
+      ansible.builtin.file:
+        path: "/opt/traefik/acme/acme.json"
+        state: touch
+        owner: "{{ deploy_user }}"
+        group: "{{ deploy_user }}"
+        mode: "0600"
+      tags: [apps]
+
+    - name: "Gerar o arquivo docker-compose.yml a partir do template"
+      ansible.builtin.template:
+        src: templates/docker-compose.yml.j2
+        dest: /opt/docker-compose.yml
+        owner: "{{ deploy_user }}"
+        group: "{{ deploy_user }}"
+        mode: "0644"
+      tags: [apps]
+
+    - name: "Implantar a stack de Traefik e Portainer com Docker Compose"
+      community.docker.docker_compose_v2:
+        project_src: /opt
+        files:
+          - docker-compose.yml
+      tags: [apps]
+
   # ----------------------------------------------------------------------------
   # HANDLERS: Ações acionadas por tarefas anteriores (apenas se houver mudança)
   # ----------------------------------------------------------------------------
@@ -322,4 +444,9 @@
     - name: Reiniciar Auditd
       ansible.builtin.service:
         name: auditd
+        state: restarted
+
+    - name: Reiniciar Docker
+      ansible.builtin.service:
+        name: docker
         state: restarted
