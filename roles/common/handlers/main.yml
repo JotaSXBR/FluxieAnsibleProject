@@ -1,0 +1,11 @@
+---
+# handlers file for common role
+- name: Reiniciar SSH
+  ansible.builtin.service:
+    name: sshd
+    state: restarted
+
+- name: Reiniciar Fail2Ban
+  ansible.builtin.service:
+    name: fail2ban
+    state: restarted 

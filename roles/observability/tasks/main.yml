@@ -1,0 +1,69 @@
+---
+# tasks file for observability role
+# Responsável por configurar e implantar a stack de aplicações e observabilidade.
+
+# --------------------------------------------------------------------------
+# ETAPA 10: CRIAÇÃO DOS DIRETÓRIOS E CONFIGURAÇÕES
+# --------------------------------------------------------------------------
+- name: "Criar diretórios de configuração para Traefik, Portainer e Observabilidade"
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: "{{ deploy_user }}"
+    group: "{{ deploy_user }}"
+    mode: "0755"
+  loop:
+    - /opt/traefik
+    - /opt/portainer
+    - /opt/prometheus
+    - /opt/grafana
+  tags: [apps]
+
+- name: "Copy Grafana provisioning files"
+  copy:
+    src: ../../grafana # Path relativo à localização do playbook, não da role
+    dest: /opt/
+    owner: deploy
+    group: deploy
+  tags: [apps]
+
+- name: "Template Prometheus config file"
+  template:
+    src: ../../templates/prometheus.yml.j2 # Path relativo
+    dest: /opt/prometheus/config/prometheus.yml
+    owner: "{{ deploy_user }}"
+    group: "{{ deploy_user }}"
+    mode: "0644"
+  tags: [apps]
+
+# --------------------------------------------------------------------------
+# ETAPA 11: IMPLANTAÇÃO DA STACK DE APLICAÇÕES (DOCKER COMPOSE)
+# --------------------------------------------------------------------------
+- name: "Template Docker Compose file"
+  template:
+    src: ../../templates/docker-compose.yml.j2 # Path relativo
+    dest: /opt/docker-compose.yml
+    owner: "{{ deploy_user }}"
+    group: "{{ deploy_user }}"
+    mode: "0644"
+  tags: [apps]
+
+- name: "Implantar ou atualizar a stack de serviços com Docker Compose"
+  community.docker.docker_compose_v2:
+    project_src: /opt
+    state: present
+  tags: [apps]
+
+# --------------------------------------------------------------------------
+# ETAPA 12: VERIFICAÇÃO FINAL
+# --------------------------------------------------------------------------
+- name: "Verificar os contêineres em execução"
+  ansible.builtin.command: docker ps -a
+  register: docker_ps_output
+  changed_when: false
+  tags: [apps, always]
+
+- name: "Exibir lista de contêineres"
+  ansible.builtin.debug:
+    msg: "{{ docker_ps_output.stdout_lines }}"
+  tags: [apps, always] 

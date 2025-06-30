@@ -9,6 +9,7 @@ services:
       - no-new-privileges:true
     networks:
       - traefik-public
+      - monitor-net
     ports:
       - "80:80"
       - "443:443"
@@ -64,7 +65,7 @@ services:
     container_name: "prometheus"
     restart: unless-stopped
     networks:
-      - traefik-public
+      - monitor-net
     volumes:
       - "/opt/prometheus/config:/etc/prometheus"
       - "prometheus-data:/prometheus"
@@ -87,7 +88,7 @@ services:
       - "/opt/grafana/data:/var/lib/grafana"
       - "/opt/grafana/provisioning:/etc/grafana/provisioning"
     networks:
-      - traefik-public
+      - monitor-net
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.grafana.rule=Host(`grafana.{{ domain }}`)"
@@ -102,7 +103,7 @@ services:
     container_name: "jaeger"
     restart: unless-stopped
     networks:
-      - traefik-public
+      - monitor-net
     environment:
       - COLLECTOR_OTLP_ENABLED=true
     labels:
@@ -120,4 +121,6 @@ volumes:
 
 networks:
   traefik-public:
-    name: traefik-public 
+    name: traefik-public
+  monitor-net:
+    name: monitor-net 
