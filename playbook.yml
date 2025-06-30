@@ -16,6 +16,9 @@
   become: yes
   vars:
     deploy_user: deploy
+    swap_file_path: /swapfile
+    # Define o tamanho do swap como 50% da RAM, com um mínimo de 1GB e um máximo de 4GB.
+    swap_size_mb: "{{ ([1024, (ansible_memtotal_mb / 2) | int, 4096] | sort)[1] }}"
 
   tasks:
     # --------------------------------------------------------------------------
@@ -100,7 +103,16 @@
       tags: [user, sudo]
 
     # --------------------------------------------------------------------------
-    # ETAPA 3: REFORÇO DE SEGURANÇA DO KERNEL E SISTEMA
+    # ETAPA 3: CONFIGURAÇÃO DE SWAP (MEMÓRIA VIRTUAL)
+    # --------------------------------------------------------------------------
+    - name: "Configurar e ativar um arquivo de swap"
+      community.general.swap_file:
+        name: "{{ swap_file_path }}"
+        size: "{{ swap_size_mb }}M"
+      tags: [system, swap]
+
+    # --------------------------------------------------------------------------
+    # ETAPA 4: REFORÇO DE SEGURANÇA DO KERNEL E SISTEMA
     # --------------------------------------------------------------------------
     - name: "Aplicar configurações de segurança ao Kernel via sysctl"
       ansible.builtin.sysctl:
@@ -125,7 +137,7 @@
       tags: [system, kernel, security]
 
     # --------------------------------------------------------------------------
-    # ETAPA 4: REFORÇO DE SEGURANÇA DO SSH
+    # ETAPA 5: REFORÇO DE SEGURANÇA DO SSH
     # --------------------------------------------------------------------------
     - name: "Criar banner de aviso para o login SSH"
       ansible.builtin.copy:
@@ -162,7 +174,7 @@
       tags: [ssh, security]
 
     # --------------------------------------------------------------------------
-    # ETAPA 5: CONFIGURAÇÃO DO FIREWALL (UFW)
+    # ETAPA 6: CONFIGURAÇÃO DO FIREWALL (UFW)
     # --------------------------------------------------------------------------
     - name: "Resetar configurações do UFW para um estado limpo"
       community.general.ufw:
@@ -205,7 +217,7 @@
       tags: [firewall, ufw]
 
     # --------------------------------------------------------------------------
-    # ETAPA 6: PROTEÇÃO CONTRA FORÇA BRUTA (FAIL2BAN)
+    # ETAPA 7: PROTEÇÃO CONTRA FORÇA BRUTA (FAIL2BAN)
     # --------------------------------------------------------------------------
     - name: "Configurar Fail2Ban para proteger o SSH"
       ansible.builtin.copy:
@@ -231,7 +243,7 @@
       tags: [fail2ban]
 
     # --------------------------------------------------------------------------
-    # ETAPA 7: ATUALIZAÇÕES AUTOMÁTICAS DE SEGURANÇA
+    # ETAPA 8: ATUALIZAÇÕES AUTOMÁTICAS DE SEGURANÇA
     # --------------------------------------------------------------------------
     - name: "Configurar APT para atualizações automáticas"
       ansible.builtin.copy:
@@ -268,7 +280,7 @@
       tags: [unattended-upgrades, security]
 
     # --------------------------------------------------------------------------
-    # ETAPA 8: AUDITORIA DO SISTEMA (AUDITD)
+    # ETAPA 9: AUDITORIA DO SISTEMA (AUDITD)
     # --------------------------------------------------------------------------
     - name: "Configurar regras de auditoria para monitorar arquivos críticos"
       ansible.builtin.copy:

@@ -2,7 +2,32 @@
 
 Este projeto utiliza Ansible para automatizar a configuração e o hardening (reforço de segurança) de um servidor Debian ou Ubuntu, preparando-o para um ambiente de produção.
 
-## Requisitos
+## Configuração do Ambiente Local (Sua Máquina)
+
+Antes de executar o playbook, você precisa ter o Ansible e suas dependências instaladas na sua máquina local.
+
+### 1. Instalar Python e Pip
+
+O Ansible é baseado em Python. Certifique-se de que você tem o Python 3.8 ou superior instalado. Você pode verificar com:
+```bash
+python3 --version
+```
+O `pip` (gerenciador de pacotes do Python) geralmente já vem com as versões mais recentes do Python.
+
+### 2. Instalar o Ansible
+A forma recomendada de instalar a versão mais recente do Ansible é usando `pip`:
+```bash
+python3 -m pip install ansible
+```
+
+### 3. Instalar Coleções do Ansible Galaxy
+Nosso playbook utiliza módulos da coleção `community.general`. Instale-a com o seguinte comando:
+```bash
+ansible-galaxy collection install community.general
+```
+Após esses passos, seu ambiente local estará pronto para executar o playbook.
+
+## Requisitos do Servidor Remoto
 
 Antes de executar este playbook, você precisa garantir que os seguintes pré-requisitos foram atendidos no seu servidor de destino.
 
@@ -23,18 +48,12 @@ adduser deploy
 # 2. Adicione o usuário ao grupo 'sudo' para permitir a elevação de privilégios
 usermod -aG sudo deploy
 
-# 3. (Opcional, mas recomendado) Mude para o novo usuário para criar o diretório .ssh
+# 3. (Opcional, mas recomendado) Crie a estrutura para chaves SSH
 su - deploy
-
-# 4. Crie o diretório para as chaves SSH autorizadas
 mkdir ~/.ssh
 chmod 700 ~/.ssh
-
-# 5. Crie o arquivo authorized_keys
 touch ~/.ssh/authorized_keys
 chmod 600 ~/.ssh/authorized_keys
-
-# 6. Saia da sessão do usuário 'deploy'
 exit
 ```
 
@@ -42,16 +61,11 @@ exit
 
 Para uma conexão segura e sem a necessidade de digitar senhas, configure o acesso para o usuário `deploy` usando sua chave SSH pública.
 
-Copie sua chave SSH pública (geralmente `~/.ssh/id_rsa.pub` na sua máquina local) para o arquivo `/home/deploy/.ssh/authorized_keys` no servidor. Você pode usar o comando `ssh-copy-id`:
-
-```bash
-# Substitua 'user@seu_servidor_ip' pelo seu usuário de acesso inicial
-ssh-copy-id -i ~/.ssh/id_rsa.pub deploy@seu_servidor_ip
-```
+Se você não possui uma chave SSH, pode criar uma com o comando `ssh-keygen -t rsa -b 4096`.
 
 ## Como Executar o Playbook
 
-Após concluir os pré-requisitos, você pode executar o playbook Ansible a partir da sua máquina local.
+Após concluir a configuração do ambiente local e os pré-requisitos do servidor remoto, você pode executar o playbook Ansible.
 
 1.  **Atualize o Inventário:**
     Certifique-se de que o arquivo `inventory.ini` contém o endereço IP correto do seu servidor.
