@@ -57,10 +57,16 @@ Após concluir os pré-requisitos, você pode executar o playbook Ansible a part
     Certifique-se de que o arquivo `inventory.ini` contém o endereço IP correto do seu servidor.
 
 2.  **Execute o Comando Ansible:**
-    Não é mais necessário especificar o usuário `root` ou pedir senha, pois a conexão será feita com o usuário `deploy` através da sua chave SSH.
+    Para máxima segurança e compatibilidade, execute o playbook solicitando as senhas de conexão (SSH) e de privilégio (`sudo`) em tempo de execução. Isso evita armazenar senhas e funciona mesmo que as chaves SSH ou o `sudo` sem senha ainda não estejam configurados.
 
     ```bash
-    ansible-playbook -i inventory.ini playbook.yml
+    ansible-playbook -i inventory.ini playbook.yml --ask-pass --ask-become-pass
     ```
+
+    O Ansible solicitará duas senhas:
+    - **SSH password:** A senha do usuário `deploy` para conectar ao servidor.
+    - **BECOME password:** A senha de `sudo` do usuário `deploy` (geralmente, é a mesma senha do usuário).
+
+    **Nota:** Após a primeira execução bem-sucedida, o playbook configura o `sudo` sem senha para o usuário `deploy`. Em execuções futuras, a opção `--ask-become-pass` não será mais estritamente necessária. Se você configurou o acesso com chaves SSH (conforme recomendado), a opção `--ask-pass` também pode ser omitida.
 
 O Ansible se conectará como `deploy` e usará `sudo` (`become: yes`) para executar as tarefas que exigem privilégios de administrador. 

@@ -68,6 +68,17 @@
         state: present
       tags: [packages]
 
+    - name: "Remover pacotes desnecessários para reduzir a superfície de ataque"
+      ansible.builtin.apt:
+        name:
+          - popularity-contest
+          - telnetd
+          - rsh-server
+          - avahi-daemon
+        state: absent
+        purge: yes
+      tags: [packages, security]
+
     # --------------------------------------------------------------------------
     # ETAPA 2: CRIAÇÃO E CONFIGURAÇÃO DE USUÁRIO
     # --------------------------------------------------------------------------
@@ -171,6 +182,20 @@
       community.general.ufw:
         rule: allow
         name: OpenSSH
+      tags: [firewall, ufw]
+
+    - name: "Permitir tráfego HTTP na porta 80"
+      community.general.ufw:
+        rule: allow
+        port: '80'
+        proto: tcp
+      tags: [firewall, ufw]
+
+    - name: "Permitir tráfego HTTPS na porta 443"
+      community.general.ufw:
+        rule: allow
+        port: '443'
+        proto: tcp
       tags: [firewall, ufw]
 
     - name: "Ativar o firewall UFW com logging"
