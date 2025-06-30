@@ -1,0 +1,288 @@
+---
+# ============================================================================
+#  Ansible Playbook: Secure Debian/Ubuntu Server Setup
+# ============================================================================
+#
+#  Objetivo: Preparar um servidor mínimo e seguro para produção, com
+#            foco em hardening e boas práticas.
+#
+#  Como executar:
+#  ansible-playbook -i inventory.ini playbook.yml
+#
+# ============================================================================
+
+- name: Preparar e Proteger Servidor Debian/Ubuntu
+  hosts: servers
+  become: yes
+  vars:
+    deploy_user: deploy
+
+  tasks:
+    # --------------------------------------------------------------------------
+    # ETAPA 1: ATUALIZAÇÃO DO SISTEMA E PACOTES ESSENCIAIS
+    # --------------------------------------------------------------------------
+    - name: "Atualizar cache de pacotes (APT)"
+      ansible.builtin.apt:
+        update_cache: yes
+        cache_valid_time: 3600
+      tags: [packages]
+
+    - name: "Realizar upgrade completo do sistema para a última versão"
+      ansible.builtin.apt:
+        upgrade: dist
+        autoremove: yes
+      tags: [packages]
+
+    - name: "Verificar se um reinício é necessário após a atualização do sistema"
+      ansible.builtin.stat:
+        path: /var/run/reboot-required
+      register: reboot_required_file
+      tags: [packages]
+
+    - name: "Reiniciar o servidor (se necessário), aguardar reconexão e esperar 2 minutos"
+      ansible.builtin.reboot:
+        msg: "Reiniciando o servidor devido a uma atualização crítica (ex: kernel). Aguardando 2 minutos para continuar."
+        reboot_timeout: 300
+        post_reboot_delay: 120
+      when: reboot_required_file.stat.exists
+      tags: [packages]
+
+    - name: "Instalar pacotes de segurança e utilitários essenciais"
+      ansible.builtin.apt:
+        name:
+          # Segurança
+          - ufw
+          - fail2ban
+          - unattended-upgrades
+          - auditd
+          - apt-listchanges
+          # Utilitários
+          - htop
+          - curl
+          - wget
+          - git
+          - vim
+          - rsync
+          - ca-certificates
+          - gnupg
+        state: present
+      tags: [packages]
+
+    # --------------------------------------------------------------------------
+    # ETAPA 2: CRIAÇÃO E CONFIGURAÇÃO DE USUÁRIO
+    # --------------------------------------------------------------------------
+    - name: "Garantir que o usuário '{{ deploy_user }}' existe e pertence ao grupo 'sudo'"
+      ansible.builtin.user:
+        name: "{{ deploy_user }}"
+        shell: /bin/bash
+        groups: sudo
+        append: yes
+      tags: [user]
+
+    - name: "Conceder a '{{ deploy_user }}' acesso sudo sem senha"
+      ansible.builtin.lineinfile:
+        path: "/etc/sudoers.d/{{ deploy_user }}"
+        line: "{{ deploy_user }} ALL=(ALL) NOPASSWD: ALL"
+        create: yes
+        validate: 'visudo -cf %s'
+        mode: '0440'
+      tags: [user, sudo]
+
+    # --------------------------------------------------------------------------
+    # ETAPA 3: REFORÇO DE SEGURANÇA DO KERNEL E SISTEMA
+    # --------------------------------------------------------------------------
+    - name: "Aplicar configurações de segurança ao Kernel via sysctl"
+      ansible.builtin.sysctl:
+        name: "{{ item.name }}"
+        value: "{{ item.value }}"
+        state: present
+        reload: yes
+      loop:
+        - { name: 'net.ipv4.conf.all.rp_filter', value: '1' }
+        - { name: 'net.ipv4.conf.default.rp_filter', value: '1' }
+        - { name: 'net.ipv4.icmp_echo_ignore_broadcasts', value: '1' }
+        - { name: 'net.ipv4.conf.all.accept_redirects', value: '0' }
+        - { name: 'net.ipv4.conf.default.accept_redirects', value: '0' }
+        - { name: 'net.ipv4.conf.all.secure_redirects', value: '0' }
+        - { name: 'net.ipv4.conf.default.secure_redirects', value: '0' }
+        - { name: 'net.ipv4.conf.all.accept_source_route', value: '0' }
+        - { name: 'net.ipv4.conf.default.accept_source_route', value: '0' }
+        - { name: 'net.ipv4.tcp_syncookies', value: '1' }
+        - { name: 'kernel.dmesg_restrict', value: '1' }
+        - { name: 'kernel.kptr_restrict', value: '2' }
+        - { name: 'kernel.yama.ptrace_scope', value: '1' }
+      tags: [system, kernel, security]
+
+    # --------------------------------------------------------------------------
+    # ETAPA 4: REFORÇO DE SEGURANÇA DO SSH
+    # --------------------------------------------------------------------------
+    - name: "Criar banner de aviso para o login SSH"
+      ansible.builtin.copy:
+        dest: /etc/issue.net
+        content: |
+          ******************************************************************
+          *                     ACESSO AUTORIZADO APENAS                   *
+          *                                                                *
+          *      Este sistema é monitorado. Todas as atividades são        *
+          *      registradas e podem ser usadas como evidência.            *
+          ******************************************************************
+        mode: '0644'
+      tags: [ssh, security]
+
+    - name: "Aplicar configurações de segurança ao SSH"
+      ansible.builtin.lineinfile:
+        path: /etc/ssh/sshd_config
+        regexp: "^#?{{ item.key }}"
+        line: "{{ item.key }} {{ item.value }}"
+        state: present
+      loop:
+        - { key: 'PermitRootLogin', value: 'no' }
+        - { key: 'PasswordAuthentication', value: 'yes' } # Mantém login por senha
+        - { key: 'PermitEmptyPasswords', value: 'no' }
+        - { key: 'ChallengeResponseAuthentication', value: 'no' }
+        - { key: 'X11Forwarding', value: 'no' }
+        - { key: 'MaxAuthTries', value: '3' }
+        - { key: 'LoginGraceTime', value: '60' }
+        - { key: 'AllowUsers', value: '{{ deploy_user }}' }
+        - { key: 'Banner', value: '/etc/issue.net' }
+        # Garante que o subsistema SFTP padrão esteja ativo
+        - { key: 'Subsystem', value: 'sftp /usr/lib/openssh/sftp-server' }
+      notify: Reiniciar SSH
+      tags: [ssh, security]
+
+    # --------------------------------------------------------------------------
+    # ETAPA 5: CONFIGURAÇÃO DO FIREWALL (UFW)
+    # --------------------------------------------------------------------------
+    - name: "Resetar configurações do UFW para um estado limpo"
+      community.general.ufw:
+        state: reset
+      tags: [firewall, ufw]
+
+    - name: "Definir políticas padrão do UFW (negar entrada, permitir saída)"
+      community.general.ufw:
+        direction: "{{ item.direction }}"
+        policy: "{{ item.policy }}"
+      loop:
+        - { direction: 'incoming', policy: 'deny' }
+        - { direction: 'outgoing', policy: 'allow' }
+      tags: [firewall, ufw]
+
+    - name: "Permitir conexões SSH (essencial para não perder o acesso)"
+      community.general.ufw:
+        rule: allow
+        name: OpenSSH
+      tags: [firewall, ufw]
+
+    - name: "Ativar o firewall UFW com logging"
+      community.general.ufw:
+        state: enabled
+        logging: 'on'
+      tags: [firewall, ufw]
+
+    # --------------------------------------------------------------------------
+    # ETAPA 6: PROTEÇÃO CONTRA FORÇA BRUTA (FAIL2BAN)
+    # --------------------------------------------------------------------------
+    - name: "Configurar Fail2Ban para proteger o SSH"
+      ansible.builtin.copy:
+        dest: /etc/fail2ban/jail.local
+        content: |
+          [DEFAULT]
+          bantime  = 1h
+          findtime = 10m
+          maxretry = 5
+          backend  = systemd
+
+          [sshd]
+          enabled = true
+        mode: '0644'
+      notify: Reiniciar Fail2Ban
+      tags: [fail2ban, security]
+
+    - name: "Garantir que o serviço Fail2Ban esteja ativo e habilitado"
+      ansible.builtin.service:
+        name: fail2ban
+        state: started
+        enabled: yes
+      tags: [fail2ban]
+
+    # --------------------------------------------------------------------------
+    # ETAPA 7: ATUALIZAÇÕES AUTOMÁTICAS DE SEGURANÇA
+    # --------------------------------------------------------------------------
+    - name: "Configurar APT para atualizações automáticas"
+      ansible.builtin.copy:
+        dest: /etc/apt/apt.conf.d/20auto-upgrades
+        content: |
+          APT::Periodic::Update-Package-Lists "1";
+          APT::Periodic::Unattended-Upgrade "1";
+          APT::Periodic::AutocleanInterval "7";
+        owner: root
+        group: root
+        mode: '0644'
+      tags: [unattended-upgrades, security]
+
+    - name: "Restringir unattended-upgrades apenas para pacotes de segurança"
+      ansible.builtin.copy:
+        dest: /etc/apt/apt.conf.d/50unattended-upgrades
+        content: |
+          // Apenas baixar e instalar atualizações de segurança automaticamente
+          Unattended-Upgrade::Allowed-Origins {
+              "${distro_id}:${distro_codename}-security";
+          };
+
+          // Enviar email sobre problemas
+          Unattended-Upgrade::Mail "root@localhost";
+
+          // Remover dependências não utilizadas
+          Unattended-Upgrade::Remove-Unused-Dependencies "true";
+
+          // Não reiniciar automaticamente
+          Unattended-Upgrade::Automatic-Reboot "false";
+        owner: root
+        group: root
+        mode: '0644'
+      tags: [unattended-upgrades, security]
+
+    # --------------------------------------------------------------------------
+    # ETAPA 8: AUDITORIA DO SISTEMA (AUDITD)
+    # --------------------------------------------------------------------------
+    - name: "Configurar regras de auditoria para monitorar arquivos críticos"
+      ansible.builtin.copy:
+        dest: /etc/audit/rules.d/audit.rules
+        content: |
+          # Regras de auditoria para monitoramento de segurança
+          -w /etc/passwd -p wa -k passwd_changes
+          -w /etc/group -p wa -k group_changes
+          -w /etc/shadow -p wa -k shadow_changes
+          -w /etc/sudoers -p wa -k sudoers_changes
+          -w /etc/ssh/sshd_config -p wa -k sshd_config_changes
+          -w /var/log/auth.log -p wa -k auth_log
+          -w /var/log/faillog -p wa -k login_failures
+        mode: '0640'
+      notify: Reiniciar Auditd
+      tags: [auditd, security]
+
+    - name: "Garantir que o serviço Auditd esteja ativo e habilitado"
+      ansible.builtin.service:
+        name: auditd
+        state: started
+        enabled: yes
+      tags: [auditd, security]
+
+  # ----------------------------------------------------------------------------
+  # HANDLERS: Ações acionadas por tarefas anteriores (apenas se houver mudança)
+  # ----------------------------------------------------------------------------
+  handlers:
+    - name: Reiniciar SSH
+      ansible.builtin.service:
+        name: sshd
+        state: restarted
+
+    - name: Reiniciar Fail2Ban
+      ansible.builtin.service:
+        name: fail2ban
+        state: restarted
+
+    - name: Reiniciar Auditd
+      ansible.builtin.service:
+        name: auditd
+        state: restarted
